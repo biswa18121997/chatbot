@@ -1,0 +1,26 @@
+actions:
+  - name: sendMessage
+    definition:
+      kind: synchronous
+      handler: http://localhost:5678/webhook/hasura-send-message
+      forward_client_headers: true
+      headers:
+        - name: x-hasura-user-id
+          value_from_env: HASURA_GRAPHQL_UNAUTHORIZED_ROLE
+    permissions:
+      - role: user
+    comment: Send message to chatbot via n8n workflow
+
+custom_types:
+  enums: []
+  input_objects: []
+  objects:
+    - name: MessageResponse
+      fields:
+        - name: success
+          type: Boolean!
+        - name: message
+          type: String!
+        - name: response
+          type: String
+  scalars: []

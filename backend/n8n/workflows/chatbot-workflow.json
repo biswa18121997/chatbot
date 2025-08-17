@@ -1,0 +1,319 @@
+{
+  "name": "Chatbot Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "hasura-send-message",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-node",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "hasura-send-message"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Validate request and extract data\nconst body = $input.first().json.input;\nconst headers = $input.first().json.request.headers;\n\nconst chatId = body.chatId;\nconst content = body.content;\nconst userId = headers['x-hasura-user-id'];\n\nif (!chatId || !content || !userId) {\n  throw new Error('Missing required parameters');\n}\n\n// Return validated data\nreturn {\n  chatId,\n  content,\n  userId,\n  hasuraEndpoint: 'http://localhost:8080/v1/graphql',\n  hasuraAdminSecret: 'your-hasura-admin-secret'\n};"
+      },
+      "id": "validate-request",
+      "name": "Validate Request",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.hasuraEndpoint }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-hasura-admin-secret",
+              "value": "={{ $json.hasuraAdminSecret }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "query GetChat($chatId: uuid!, $userId: uuid!) { chats(where: {id: {_eq: $chatId}, user_id: {_eq: $userId}}) { id user_id } }"
+            },
+            {
+              "name": "variables",
+              "value": "={{ { \"chatId\": $json.chatId, \"userId\": $json.userId } }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "verify-chat-ownership",
+      "name": "Verify Chat Ownership",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Check if user owns the chat\nconst response = $input.first().json;\n\nif (!response.data || !response.data.chats || response.data.chats.length === 0) {\n  throw new Error('Chat not found or access denied');\n}\n\n// Get recent messages for context\nconst chatId = $('Validate Request').first().json.chatId;\nconst userId = $('Validate Request').first().json.userId;\nconst content = $('Validate Request').first().json.content;\n\nreturn {\n  chatId,\n  userId,\n  content,\n  hasuraEndpoint: $('Validate Request').first().json.hasuraEndpoint,\n  hasuraAdminSecret: $('Validate Request').first().json.hasuraAdminSecret\n};"
+      },
+      "id": "process-validation",
+      "name": "Process Validation",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.hasuraEndpoint }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-hasura-admin-secret",
+              "value": "={{ $json.hasuraAdminSecret }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "query GetRecentMessages($chatId: uuid!) { messages(where: {chat_id: {_eq: $chatId}}, order_by: {created_at: desc}, limit: 10) { content is_bot } }"
+            },
+            {
+              "name": "variables",
+              "value": "={{ { \"chatId\": $json.chatId } }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "get-context",
+      "name": "Get Recent Messages",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_OPENROUTER_API_KEY"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "HTTP-Referer",
+              "value": "https://your-app-domain.com"
+            },
+            {
+              "name": "X-Title",
+              "value": "Nhost Chatbot Application"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "openai/gpt-3.5-turbo"
+            },
+            {
+              "name": "messages",
+              "value": "={{ \n  const recentMessages = $input.first().json.data.messages || [];\n  const currentContent = $('Process Validation').first().json.content;\n  \n  const messages = [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a helpful AI assistant. Provide clear, concise, and helpful responses to user questions.\"\n    }\n  ];\n  \n  // Add recent messages for context (reverse order for chronology)\n  recentMessages.reverse().forEach(msg => {\n    messages.push({\n      \"role\": msg.is_bot ? \"assistant\" : \"user\",\n      \"content\": msg.content\n    });\n  });\n  \n  // Add current message\n  messages.push({\n    \"role\": \"user\",\n    \"content\": currentContent\n  });\n  \n  return messages;\n}}"
+            },
+            {
+              "name": "max_tokens",
+              "value": 1000
+            },
+            {
+              "name": "temperature",
+              "value": 0.7
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "call-openrouter",
+      "name": "Call OpenRouter API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Process Validation').first().json.hasuraEndpoint }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-hasura-admin-secret",
+              "value": "={{ $('Process Validation').first().json.hasuraAdminSecret }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "mutation InsertBotMessage($chatId: uuid!, $userId: uuid!, $content: String!) { insert_messages_one(object: {chat_id: $chatId, user_id: $userId, content: $content, is_bot: true}) { id } }"
+            },
+            {
+              "name": "variables",
+              "value": "={{ \n  const botResponse = $input.first().json.choices[0].message.content;\n  const chatId = $('Process Validation').first().json.chatId;\n  const userId = $('Process Validation').first().json.userId;\n  \n  return {\n    \"chatId\": chatId,\n    \"userId\": userId,\n    \"content\": botResponse\n  };\n}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "save-bot-response",
+      "name": "Save Bot Response",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Return success response to Hasura Action\nconst botResponse = $('Call OpenRouter API').first().json.choices[0].message.content;\n\nreturn {\n  success: true,\n  message: 'Message sent successfully',\n  response: botResponse\n};"
+      },
+      "id": "format-response",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "webhook-response",
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2000, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Request": {
+      "main": [
+        [
+          {
+            "node": "Verify Chat Ownership",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Chat Ownership": {
+      "main": [
+        [
+          {
+            "node": "Process Validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Validation": {
+      "main": [
+        [
+          {
+            "node": "Get Recent Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Recent Messages": {
+      "main": [
+        [
+          {
+            "node": "Call OpenRouter API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call OpenRouter API": {
+      "main": [
+        [
+          {
+            "node": "Save Bot Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Bot Response": {
+      "main": [
+        [
+          {
+            "node": "Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Response": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "createdAt": "2024-01-01T12:00:00.000Z",
+  "updatedAt": "2024-01-01T12:00:00.000Z",
+  "id": "chatbot-workflow"
+}

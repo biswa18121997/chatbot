@@ -7,7 +7,11 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "backend:setup": "chmod +x backend/setup.sh && ./backend/setup.sh",
+    "backend:start": "cd backend && docker-compose up -d",
+    "backend:stop": "cd backend && docker-compose down",
+    "backend:logs": "cd backend && docker-compose logs -f"
   },
   "dependencies": {
     "@apollo/client": "^3.13.9",

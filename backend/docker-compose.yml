@@ -1,0 +1,81 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15
+    restart: always
+    environment:
+      POSTGRES_DB: nhost
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./hasura/migrations:/docker-entrypoint-initdb.d
+
+  # Hasura GraphQL Engine
+  hasura:
+    image: hasura/graphql-engine:v2.36.0
+    restart: always
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+    environment:
+      HASURA_GRAPHQL_DATABASE_URL: postgres://postgres:postgres@postgres:5432/nhost
+      HASURA_GRAPHQL_ENABLE_CONSOLE: "true"
+      HASURA_GRAPHQL_DEV_MODE: "true"
+      HASURA_GRAPHQL_ENABLED_LOG_TYPES: startup, http-log, webhook-log, websocket-log, query-log
+      HASURA_GRAPHQL_ADMIN_SECRET: your-hasura-admin-secret
+      HASURA_GRAPHQL_JWT_SECRET: '{"type":"HS256","key":"your-jwt-secret-key-must-be-at-least-32-characters-long"}'
+      HASURA_GRAPHQL_UNAUTHORIZED_ROLE: anonymous
+    volumes:
+      - ./hasura/metadata:/hasura-metadata
+      - ./hasura/migrations:/hasura-migrations
+
+  # Nhost Auth (using Hasura Auth)
+  auth:
+    image: nhost/hasura-auth:latest
+    restart: always
+    ports:
+      - "4000:4000"
+    depends_on:
+      - postgres
+      - hasura
+    environment:
+      AUTH_HOST: "0.0.0.0"
+      AUTH_PORT: 4000
+      HASURA_GRAPHQL_DATABASE_URL: postgres://postgres:postgres@postgres:5432/nhost
+      HASURA_GRAPHQL_GRAPHQL_URL: http://hasura:8080/v1/graphql
+      HASURA_GRAPHQL_JWT_SECRET: '{"type":"HS256","key":"your-jwt-secret-key-must-be-at-least-32-characters-long"}'
+      HASURA_GRAPHQL_ADMIN_SECRET: your-hasura-admin-secret
+      AUTH_CLIENT_URL: http://localhost:5173
+      AUTH_SMTP_HOST: smtp.gmail.com
+      AUTH_SMTP_PORT: 587
+      AUTH_SMTP_USER: your-email@gmail.com
+      AUTH_SMTP_PASS: your-app-password
+      AUTH_SMTP_SENDER: your-email@gmail.com
+
+  # n8n Workflow Automation
+  n8n:
+    image: n8nio/n8n:latest
+    restart: always
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=admin
+      - N8N_BASIC_AUTH_PASSWORD=admin123
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - WEBHOOK_URL=http://localhost:5678
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n/workflows:/home/node/.n8n/workflows
+
+volumes:
+  postgres_data:
+  n8n_data:

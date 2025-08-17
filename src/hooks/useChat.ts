@@ -84,7 +84,7 @@ export function useChat(userId: string) {
       setIsTyping(true);
       await sendMessageToBot({
         variables: {
-          chat_id: currentChatId,
+          chatId: currentChatId,
           content,
         },
       });

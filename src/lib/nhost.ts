@@ -1,9 +1,9 @@
 import { NhostClient } from '@nhost/nhost-js';
 
-// Replace with your actual Nhost subdomain and region
+// Nhost configuration - update with your actual values
 const nhost = new NhostClient({
-  subdomain: 'your-subdomain',
-  region: 'your-region',
+  subdomain: process.env.VITE_NHOST_SUBDOMAIN || 'localhost',
+  region: process.env.VITE_NHOST_REGION || 'local',
 });
 
 export { nhost };

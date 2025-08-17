@@ -28,8 +28,8 @@ export const SEND_MESSAGE = gql`
 `;
 
 export const SEND_MESSAGE_TO_BOT = gql`
-  mutation SendMessageToBot($chat_id: uuid!, $content: String!) {
-    sendMessage(chat_id: $chat_id, content: $content) {
+  mutation SendMessageToBot($chatId: uuid!, $content: String!) {
+    sendMessage(chatId: $chatId, content: $content) {
       success
       message
       response

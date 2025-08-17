@@ -4,7 +4,7 @@ import { onError } from '@apollo/client/link/error';
 import { nhost } from './nhost';
 
 const httpLink = createHttpLink({
-  uri: 'https://your-hasura-endpoint.hasura.app/v1/graphql', // Replace with your Hasura endpoint
+  uri: process.env.VITE_HASURA_GRAPHQL_URL || 'http://localhost:8080/v1/graphql',
 });
 
 const authLink = setContext((_, { headers }) => {
@@ -13,6 +13,7 @@ const authLink = setContext((_, { headers }) => {
     headers: {
       ...headers,
       authorization: token ? `Bearer ${token}` : '',
+      'x-hasura-role': 'user',
     },
   };
 });

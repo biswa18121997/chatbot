@@ -13,6 +13,7 @@
     "@apollo/client": "^3.13.9",
     "@nhost/nhost-js": "^3.3.0",
     "@nhost/react": "^3.11.1",
+    "@supabase/supabase-js": "^2.55.0",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
     "graphql": "^16.11.0",
